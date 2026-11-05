@@ -1,0 +1,133 @@
+{
+  "info": {
+    "name": "Tasks Manager API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" }
+  ],
+  "item": [
+    {
+      "name": "Create Task (mock Circle.tsx review)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/tasks",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "tasks"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"prompt_version\": \"ABSTRACT_CODE_REVIEW_LAYER_2026_10_19_18\",\n  \"file\": {\n    \"path\": \"../../projects/annenkov_tech/src/Components/Circle/Circle.tsx\",\n    \"name\": \"Circle.tsx\",\n    \"language\": \"typescript\",\n    \"assumed_role\": \"UI Component\",\n    \"assumed_layer\": \"Presentation Layer\",\n    \"responsibility\": \"Rendering an interactive SVG circle with animated dots positioned along a path based on period data from the store.\",\n    \"context_confidence\": \"high\"\n  },\n  \"summary\": {\n    \"overall_quality\": \"acceptable\",\n    \"critical_issues_found\": false,\n    \"review_confidence\": \"high\",\n    \"needs_context\": false,\n    \"missing_context\": [\n      \"GSAP requirements for the used library version\"\n    ],\n    \"notes\": \"The component implements complex synchronization between React state and GSAP animations. There are questions regarding the timing mechanism used for initial positioning and a potential stale data issue in the position cache. Верификация: F-001: refuted\"\n  },\n  \"findings\": [\n    {\n      \"id\": \"F-002\",\n      \"title\": \"Fixed delay synchronization for dot positioning\",\n      \"kind\": \"architecture_question\",\n      \"category\": \"performance\",\n      \"severity\": \"low\",\n      \"confidence\": \"medium\",\n      \"release_impact\": \"backlog\",\n      \"what_was_found\": \"The initial repositioning of dots is wrapped in two requestAnimationFrame calls and a setTimeout with a 50ms delay.\",\n      \"why_it_matters\": \"The use of fixed delays for synchronization may be an attempt to wait for DOM layout or library initialization, but it is not explicitly justified.\",\n      \"scenario\": \"Component mount or update of circlePathD/periods.\",\n      \"trigger_condition\": \"Execution of the useEffect responsible for repositioning dots.\",\n      \"causal_chain\": [\n        \"useEffect trigger\",\n        \"First requestAnimationFrame execution\",\n        \"Second requestAnimationFrame execution\",\n        \"setTimeout (50ms) wait\",\n        \"repositionDots function call\",\n        \"GSAP set/motionPath updates applied to elements\"\n      ],\n      \"missing_causal_links\": [\n        \"Initial styles and layout of SVG elements\",\n        \"Implementation of CircleUI components\"\n      ],\n      \"required_context\": [\n        \"Initial styles and layout of SVG elements\",\n        \"Implementation of CircleUI components\"\n      ],\n      \"fallback_present\": \"unknown\",\n      \"recommendation\": \"Check whether positioning can be performed after confirmed availability of the required path and elements or use a synchronization mechanism provided by the animation library.\",\n      \"affected_locations\": [\n        {\n          \"function_or_symbol\": \"useEffect\",\n          \"quote\": \"firstFrame = requestAnimationFrame(() => {\\n            secondFrame = requestAnimationFrame(() => {\\n                timeout = setTimeout(repositionDots, 50);\\n            });\\n        });\",\n          \"evidence_confidence\": \"high\",\n          \"reason_if_missing\": null\n        }\n      ],\n      \"previous_finding_relation\": \"new\"\n    },\n    {\n      \"id\": \"F-003\",\n      \"title\": \"Potential stale entries in dotPositionsRef cache\",\n      \"kind\": \"conditional_risk\",\n      \"category\": \"correctness\",\n      \"severity\": \"low\",\n      \"confidence\": \"medium\",\n      \"release_impact\": \"backlog\",\n      \"what_was_found\": \"The dotPositionsRef Map is populated with period IDs, but entries are never removed when periods are deleted from the source state.\",\n      \"why_it_matters\": \"If periods can be removed from the store, the map will retain UUIDs that no longer correspond to active elements, leading to a desynchronization between the cache and the actual data set.\",\n      \"scenario\": \"Removing one or more items from the periods array in the Redux store.\",\n      \"trigger_condition\": \"The length of the periods array decreases such that some existing IDs in dotPositionsRef are no longer present in the periods array.\",\n      \"causal_chain\": [\n        \"Period removed from state\",\n        \"useEffect for populating map runs\",\n        \"Existing entries in dotPositionsRef.current are preserved via .has() check\",\n        \"Removed period ID remains as a key in the Map\"\n      ],\n      \"missing_causal_links\": [],\n      \"required_context\": [],\n      \"fallback_present\": \"unknown\",\n      \"recommendation\": \"Synchronize the dotPositionsRef map by removing entries for periods that are no longer present in the periods array.\",\n      \"affected_locations\": [\n        {\n          \"function_or_symbol\": \"useEffect\",\n          \"quote\": \"periods.forEach((period, index) => {\\n            if (!dotPositionsRef.current.has(period.id)) {\\n                dotPositionsRef.current.set(period.id, index);\\n            }\\n        });\",\n          \"evidence_confidence\": \"high\",\n          \"reason_if_missing\": null\n        }\n      ],\n      \"previous_finding_relation\": \"new\"\n    }\n  ],\n  \"improvements\": [],\n  \"parentTagName\": \"Components\",\n  \"tagName\": \"Components_Circle\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Get All Tasks",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/tasks",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "tasks"]
+        }
+      }
+    },
+    {
+      "name": "Get Tasks by file_path",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/tasks?file_path=../../projects/annenkov_tech/src/Components/Circle/Circle.tsx",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "tasks"],
+          "query": [
+            {
+              "key": "file_path",
+              "value": "../../projects/annenkov_tech/src/Components/Circle/Circle.tsx"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Get Task by ID",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/tasks/1",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "tasks", "1"]
+        }
+      }
+    },
+    {
+      "name": "Get Findings needing context",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/tasks/needs-context",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "tasks", "needs-context"]
+        }
+      }
+    },
+    {
+        "name": "Patch Task (update tag)",
+        "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+            "raw": "{{baseUrl}}/api/tasks/1",
+            "host": ["{{baseUrl}}"],
+            "path": ["api", "tasks", "1"]
+            },
+            "body": {
+            "mode": "raw",
+            "raw": "{\n  \"tagName\": \"Components_Circle_v2\"\n}"
+            }
+        }
+    },
+    {
+        "name": "Delete Task",
+        "request": {
+            "method": "DELETE",
+            "url": {
+            "raw": "{{baseUrl}}/api/tasks/1",
+            "host": ["{{baseUrl}}"],
+            "path": ["api", "tasks", "1"]
+            }
+        }
+    },
+    {
+        "name": "Put Task (full replace)",
+        "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+            "raw": "{{baseUrl}}/api/tasks/1",
+            "host": ["{{baseUrl}}"],
+            "path": ["api", "tasks", "1"]
+            },
+            "body": {
+            "mode": "raw",
+            "raw": "{ ... полное тело как в POST ... }"
+            }
+        }
+    },
+    {
+        "name": "Delete All Tasks",
+        "request": {
+            "method": "DELETE",
+            "url": {
+            "raw": "{{baseUrl}}/api/tasks",
+            "host": ["{{baseUrl}}"],
+            "path": ["api", "tasks"]
+            }
+        }
+    }
+  ]
+}
