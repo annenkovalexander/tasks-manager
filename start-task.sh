@@ -48,12 +48,13 @@ echo "==> Pruning stale remote references..."
 git fetch --prune
 
 # --- 6. Delete local branches already merged into origin/master -------------
-echo "==> Previewing merged branches to delete..."
-git branch --delete-merged --dry-run origin/master || true
+echo "==> Previewing local branches merged into origin/master..."
+git branch --merged origin/master | grep -v -E '^\*|master|main' || true
 
 echo "==> Deleting local branches merged into origin/master..."
-git branch --delete-merged origin/master || true
-
+git branch --merged origin/master \
+  | grep -v -E '^\*|master|main' \
+  | xargs -r git branch -d || true
 # --- 7. Create and switch to the new branch ---------------------------------
 echo "==> Creating and switching to branch: $BRANCH_NAME"
 if git show-ref --verify --quiet "refs/heads/$BRANCH_NAME"; then
