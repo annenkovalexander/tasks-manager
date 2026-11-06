@@ -83,7 +83,8 @@ describe('AppController (e2e)', () => {
       .send(mockTask)
       .expect(201)
       .expect((res) => {
-        expect(res.body.findingsSaved).toBe(2);
+        expect(res.body.findings).toHaveLength(2);
+        expect(res.body.findings.every((f: any) => f.findingId)).toBeTruthy();
       });
   });
 
