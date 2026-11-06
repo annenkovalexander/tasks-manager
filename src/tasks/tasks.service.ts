@@ -25,44 +25,71 @@ export class TasksService {
     return task;
   }
 
-  async createOrUpdate(dto: CreateTaskDto): Promise<{ id: number; findingsSaved: number }> {
-    // Upsert по (filePath, promptVersion)
+  async createOrUpdate(payload: CreateTaskDto): Promise<Task> {
+    const { prompt_version, file, summary, findings, parentTagName, tagName } = payload;
+
+    // 1. Ищем существующую задачу по уникальной паре
     let task = await this.taskRepo.findOne({
-      where: { filePath: dto.file.path, promptVersion: dto.prompt_version },
+      where: {
+        filePath: file.path,
+        promptVersion: prompt_version,
+      },
+      relations: { findings: true },   // объект вместо массива
+    });
+
+    // 2. Если нет — создаём новую (id будет сгенерирован)
+    if (!task) {
+      task = this.taskRepo.create({
+        filePath: file.path,
+        fileName: file.name ?? '',      // guard от undefined
+        promptVersion: prompt_version,
+        parentTag: parentTagName ?? null,
+        tagName: tagName ?? null,
+        overallQuality: summary.overall_quality,
+        needsContext: summary.needs_context,
+        taskJson: payload,
+      });
+    } else {
+      // 3. Если есть — обновляем поля, id сохраняется
+      task.fileName = file.name ?? '';
+      task.parentTag = parentTagName ?? null;
+      task.tagName = tagName ?? null;
+      task.overallQuality = summary.overall_quality ?? null;
+      task.needsContext = summary.needs_context ?? false;
+      task.taskJson = payload;
+    }
+
+    // 4. Сохраняем task (insert или update — id не меняется)
+    await this.taskRepo.save(task);
+
+    // 5. Удаляем старые findings этой задачи
+    await this.findingRepo.delete({ task: { id: task.id } });
+
+    // 6. Вставляем новые findings
+    const newFindings = findings.map((f) =>
+      this.findingRepo.create({
+        task,
+        findingId: f.id,
+        title: f.title,
+        kind: f.kind,
+        severity: f.severity,
+        findingJson: f,
+      }),
+    );
+
+    await this.findingRepo.save(newFindings);
+
+    // 7. Возвращаем задачу со свежими findings
+    const updated = await this.taskRepo.findOne({
+      where: { id: task.id },
       relations: { findings: true },
     });
 
-    if (!task) {
-      task = this.taskRepo.create();
+    if (!updated) {
+      throw new NotFoundException(`Task with id ${task.id} not found after save`);
     }
 
-    task.filePath = dto.file.path;
-    task.fileName = dto.file.name;
-    task.promptVersion = dto.prompt_version;
-    task.parentTag = dto.parentTagName || null;
-    task.tagName = dto.tagName || null;
-    task.overallQuality = dto.summary?.overall_quality || null;
-    task.needsContext = dto.summary?.needs_context || false;
-    task.taskJson = dto as any;
-
-    // Пересобираем findings
-    task.findings = (dto.findings || []).map((f) => {
-      const finding = this.findingRepo.create();
-      finding.findingId = f.id;
-      finding.title = f.title;
-      finding.kind = f.kind;
-      finding.category = f.category || null;
-      finding.severity = f.severity || null;
-      finding.confidence = f.confidence || null;
-      finding.releaseImpact = f.release_impact || null;
-      finding.findingJson = f as any;
-      finding.task = task;
-      return finding;
-    });
-
-    const saved = await this.taskRepo.save(task);
-
-    return { id: saved.id, findingsSaved: saved.findings.length };
+    return updated;
   }
 
   async findOne(id: number): Promise<Task> {

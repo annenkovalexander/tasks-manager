@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# commit-push.sh — Stage all changes, commit with a message, and push.
+# commit-push.sh — Run e2e tests, stage all changes, commit with a message, and push.
 #
 # Usage:
 #   ./commit-push.sh "<commit message>"
@@ -10,6 +10,7 @@
 #
 set -euo pipefail
 
+
 # --- 1. Check that a commit message was provided ----------------------------
 if [ "$#" -ne 1 ]; then
   echo "Error: exactly one argument is required."
@@ -18,7 +19,9 @@ if [ "$#" -ne 1 ]; then
   exit 1
 fi
 
+
 COMMIT_MESSAGE="$1"
+
 
 # --- 2. Check that we are inside a git repository ---------------------------
 if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -26,22 +29,34 @@ if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   exit 1
 fi
 
+
 # --- 3. Check that there is something to commit -----------------------------
 if [ -z "$(git status --porcelain)" ]; then
   echo "Nothing to commit — working tree is clean."
   exit 0
 fi
 
-# --- 4. Stage all changes ----------------------------------------------------
+
+# --- 4. Run e2e tests --------------------------------------------------------
+echo "==> Running e2e tests..."
+DATABASE_URL=postgres://tasksuser:tasksPass123@localhost:5432/tasksmanager npm run test:e2e
+
+echo "==> E2E tests passed."
+
+
+# --- 5. Stage all changes ----------------------------------------------------
 echo "==> Staging all changes..."
 git add .
 
-# --- 5. Commit with the provided message ------------------------------------
+
+# --- 6. Commit with the provided message ------------------------------------
 echo "==> Committing: $COMMIT_MESSAGE"
 git commit -m "$COMMIT_MESSAGE"
 
-# --- 6. Push to origin -------------------------------------------------------
+
+# --- 7. Push to origin -------------------------------------------------------
 CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+
 
 if git rev-parse --verify --quiet "origin/$CURRENT_BRANCH" >/dev/null 2>&1; then
   echo "==> Pushing to origin/$CURRENT_BRANCH..."
@@ -51,5 +66,6 @@ else
   git push -u origin "$CURRENT_BRANCH"
 fi
 
+
 echo ""
-echo "Done. Committed and pushed to origin/$CURRENT_BRANCH."
+echo "Done. Tested, committed and pushed to origin/$CURRENT_BRANCH."
