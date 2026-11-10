@@ -1,9 +1,11 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In, MoreThan } from 'typeorm';
+import { Repository, MoreThan } from 'typeorm';
 import { Task } from './entities/task.entity.js';
 import { Finding } from './entities/finding.entity.js';
 import { CreateTaskDto } from './dto/create-task.dto.js';
+import { toTaskResponse } from './tasks-response.mapper.js';
+
 
 @Injectable()
 export class TasksService {
@@ -14,19 +16,22 @@ export class TasksService {
     private readonly findingRepo: Repository<Finding>,
   ) {}
 
+
   // Убирает обратную ссылку task у findings, чтобы JSON не зацикливался
   private sanitize(task: Task): Task {
     if (task.findings) {
-      task.findings = task.findings.map((f) => {
+      task.findings = task.findings.map((f: Finding) => {
         const { task: _, ...rest } = f as any;
         return rest as Finding;
-      }) as any;
+      });
     }
     return task;
   }
 
+
   async createOrUpdate(payload: CreateTaskDto): Promise<Task> {
     const { prompt_version, file, summary, findings, parentTagName, tagName } = payload;
+
 
     // 1. Ищем существующую задачу по уникальной паре
     let task = await this.taskRepo.findOne({
@@ -34,14 +39,15 @@ export class TasksService {
         filePath: file.path,
         promptVersion: prompt_version,
       },
-      relations: { findings: true },   // объект вместо массива
+      relations: { findings: true },
     });
 
-    // 2. Если нет — создаём новую (id будет сгенерирован)
+
+    // 2. Если нет — создаём новую
     if (!task) {
       task = this.taskRepo.create({
         filePath: file.path,
-        fileName: file.name ?? '',      // guard от undefined
+        fileName: file.name ?? '',
         promptVersion: prompt_version,
         parentTag: parentTagName ?? null,
         tagName: tagName ?? null,
@@ -50,7 +56,7 @@ export class TasksService {
         taskJson: payload,
       });
     } else {
-      // 3. Если есть — обновляем поля, id сохраняется
+      // 3. Если есть — обновляем поля
       task.fileName = file.name ?? '';
       task.parentTag = parentTagName ?? null;
       task.tagName = tagName ?? null;
@@ -59,11 +65,14 @@ export class TasksService {
       task.taskJson = payload;
     }
 
-    // 4. Сохраняем task (insert или update — id не меняется)
+
+    // 4. Сохраняем task
     await this.taskRepo.save(task);
 
-    // 5. Удаляем старые findings этой задачи
+
+    // 5. Удаляем старые findings
     await this.findingRepo.delete({ task: { id: task.id } });
+
 
     // 6. Вставляем новые findings
     const newFindings = findings.map((f) =>
@@ -77,7 +86,9 @@ export class TasksService {
       }),
     );
 
+
     await this.findingRepo.save(newFindings);
+
 
     // 7. Возвращаем задачу со свежими findings
     const updated = await this.taskRepo.findOne({
@@ -85,34 +96,40 @@ export class TasksService {
       relations: { findings: true },
     });
 
+
     if (!updated) {
       throw new NotFoundException(`Task with id ${task.id} not found after save`);
     }
 
+
     return updated;
   }
 
-  async findOne(id: number): Promise<Task> {
+
+  async findOne(id: number) {
     const task = await this.taskRepo.findOne({
       where: { id },
       relations: { findings: true },
     });
     if (!task) throw new NotFoundException(`Task #${id} not found`);
-    return this.sanitize(task);
+    return toTaskResponse(this.sanitize(task));
   }
 
-  async findByFilePath(filePath?: string): Promise<Task[]> {
+
+  async findByFilePath(filePath?: string) {
     const tasks = await this.taskRepo.find({
       where: filePath ? { filePath } : {},
       order: { updatedAt: 'DESC' },
       relations: { findings: true },
     });
-    return tasks.map((t) => this.sanitize(t));
+    return tasks.map((t) => toTaskResponse(this.sanitize(t)));
   }
+
 
   async findNeedsContext(): Promise<Finding[]> {
     return this.findingRepo.find({ where: { kind: 'needs_context' } });
   }
+
 
   async replace(id: number, dto: CreateTaskDto): Promise<Task> {
     const task = await this.taskRepo.findOne({
@@ -121,7 +138,7 @@ export class TasksService {
     });
     if (!task) throw new NotFoundException(`Task #${id} not found`);
 
-    // Полная замена всех полей
+
     task.filePath = dto.file.path;
     task.fileName = dto.file.name;
     task.promptVersion = dto.prompt_version;
@@ -131,10 +148,10 @@ export class TasksService {
     task.needsContext = dto.summary?.needs_context || false;
     task.taskJson = dto as any;
 
-    // 1. Удаляем старые findings
+
     await this.findingRepo.delete({ task: { id: task.id } });
 
-    // 2. Создаём новые
+
     task.findings = (dto.findings || []).map((f) => {
       const finding = this.findingRepo.create();
       finding.findingId = f.id;
@@ -149,9 +166,11 @@ export class TasksService {
       return finding;
     });
 
+
     const saved = await this.taskRepo.save(task);
     return this.sanitize(saved);
   }
+
 
   async update(id: number, dto: Partial<CreateTaskDto>): Promise<Task> {
     const task = await this.taskRepo.findOne({
@@ -159,6 +178,7 @@ export class TasksService {
       relations: { findings: true },
     });
     if (!task) throw new NotFoundException(`Task #${id} not found`);
+
 
     if (dto.file) {
       task.filePath = dto.file.path;
@@ -182,8 +202,8 @@ export class TasksService {
       }
     }
     if (dto.findings) {
-      // Удаляем старые findings перед заменой
       await this.findingRepo.delete({ task: { id: task.id } });
+
 
       task.findings = dto.findings.map((f) => {
         const finding = this.findingRepo.create();
@@ -200,9 +220,11 @@ export class TasksService {
       });
     }
 
+
     const saved = await this.taskRepo.save(task);
     return this.sanitize(saved);
   }
+
 
   async remove(id: number): Promise<{ deleted: boolean }> {
     const result = await this.taskRepo.delete(id);
@@ -211,6 +233,7 @@ export class TasksService {
     }
     return { deleted: true };
   }
+
 
   async removeAll(): Promise<{ deleted: number }> {
     const result = await this.taskRepo.delete({ id: MoreThan(0) });
